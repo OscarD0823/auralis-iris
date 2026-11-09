@@ -48,7 +48,6 @@ button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke
 .library-entry:hover, .library-entry[aria-current="true"] { background: #edf6f0; border-color: #c7dfd2; }
 .library-entry strong { overflow-wrap: anywhere; }
 .library-entry span { font-size: .78rem; color: var(--muted); }
-.library-tools { margin-top: 12px; }
 .pill { white-space: nowrap; border-radius: 100px; padding: 5px 10px; background: #eef5ef; color: var(--accent-dark); font-size: .8rem; font-weight: 650; }
 .field { display: grid; gap: 6px; color: var(--muted); font-size: .82rem; font-weight: 650; }
 .title-field { margin-block: 16px 12px; }
@@ -74,7 +73,8 @@ textarea { resize: vertical; overflow-wrap: anywhere; }
 .page-thumb { display: grid; gap: 6px; width: 100%; min-width: 0; padding: 4px; background: #f4f7f3; border: 0; border-radius: 7px; color: var(--accent-dark); font-size: .82rem; font-weight: 650; }
 .page-thumb img { width: 100%; height: 112px; object-fit: contain; border-radius: 4px; }
 .page-actions { display: flex; justify-content: center; margin-top: 4px; }
-.page-actions button { min-width: 34px; min-height: 34px; padding: 3px; font-size: 1.02rem; }
+.page-actions button { min-width: 28px; min-height: 34px; padding: 3px; font-size: 1.02rem; }
+.page-actions .jpg-action { font-size: .67rem; font-weight: 760; }
 .pdf-controls { align-items: end; margin-top: 12px; }
 .pdf-controls .field { flex: 1 1 170px; max-width: 250px; }
 .pdf-result, .connection-banner { border: 1px solid #b9d9c8; border-radius: 10px; background: #eff8f1; padding: 12px; }

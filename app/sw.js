@@ -1,9 +1,9 @@
-const cacheName = "auralis-iris-0.1.0-beta.2";
+const cacheName = "auralis-iris-0.1.0-beta.3";
 const home = self.registration.scope;
 const files = [
-  "styles.css", "app.js", "scan.js", "store.js", "pair.js", "backup.js", "export.js", "pdf.js", "pdf-worker.js",
+  "styles.css", "app.js", "scan.js", "store.js", "pair.js", "export.js", "export-worker.js", "images.js", "pdf.js",
   "iris.svg", "iris-192.png", "iris-512.png", "manifest.webmanifest",
-  "vendor/pdf-lib.js", "vendor/qrcode.js", "vendor/jsqr.js"
+  "vendor/pdf-lib.js", "vendor/qrcode.js", "vendor/jsqr.js", "vendor/fflate.js"
 ];
 const urls = new Set([home, ...files.map((file) => new URL(file, home).href)]);
 

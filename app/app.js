@@ -1,8 +1,7 @@
 import { MAX_PAGES, makePage, rotatePage, validQuad, fullFrame, detectEdges, orientedPage, renderScan, jpeg, newId } from "./scan.js";
 import { openLibrary, readScans, saveScan, deleteScan } from "./store.js";
 import { setupPair } from "./pair.js";
-import { exportPdf } from "./export.js";
-import { makeBackup, readBackup } from "./backup.js";
+import { exportImages, exportPdf } from "./export.js";
 
 const $ = (selector) => document.querySelector(selector);
 const pageDialog = $("#page-dialog");
@@ -75,8 +74,8 @@ function displayTitle(title) {
   return title.trim().slice(0, 120) || "Escaneo sin título";
 }
 
-function fileName(title, extension = "pdf") {
-  return (displayTitle(title).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/[. ]+$/g, "") || "Escaneo") + "." + extension;
+function fileName(title, extension = "pdf", suffix = "") {
+  return (displayTitle(title).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/[. ]+$/g, "") || "Escaneo") + suffix + "." + extension;
 }
 
 function create(tag, className, value) {
@@ -187,9 +186,11 @@ function renderPages() {
     const actions = create("div", "page-actions");
     const before = control("Mover página " + (index + 1) + " hacia el inicio", "↑", changePage(page.id, -1));
     const after = control("Mover página " + (index + 1) + " hacia el final", "↓", changePage(page.id, 1));
+    const saveImage = control("Descargar página " + (index + 1) + " como JPG", "JPG", downloadImages(page.id));
+    saveImage.classList.add("jpg-action");
     before.dataset.boundary = String(index === 0);
     after.dataset.boundary = String(index === current.pages.length - 1);
-    actions.append(before, after, control("Quitar página " + (index + 1), "×", changePage(page.id, 0)));
+    actions.append(before, after, saveImage, control("Quitar página " + (index + 1), "×", changePage(page.id, 0)));
     item.append(adjust, actions);
     pagesList.append(item);
   });
@@ -202,8 +203,7 @@ function setControls() {
   $("#import").disabled = busy || count >= MAX_PAGES;
   $("#generate").disabled = busy || count === 0;
   $("#new-doc").disabled = busy;
-  $("#restore").disabled = busy;
-  $("#backup").disabled = busy;
+  $("#download-images").disabled = busy || count === 0;
   $("#delete-doc").disabled = busy;
   $("#download").disabled = busy;
   $("#share").disabled = busy;
@@ -230,7 +230,8 @@ function render(updateTitle = false) {
   $("#pdf-result").hidden = !current.pdf;
   $("#pdf-label").textContent = current.pdfStale ? "PDF guardado · versión anterior" : "PDF guardado";
   if (current.pdf) $("#pdf-size").textContent = sizeText(current.pdf.size);
-  $("#backup").hidden = !current.pdf && !current.pages.length;
+  $("#download-images").hidden = current.pages.length === 0;
+  $("#download-images").textContent = current.pages.length > 1 ? "Descargar JPG (ZIP)" : "Descargar JPG";
   $("#delete-doc").hidden = !current.updated;
   renderLibrary();
   renderPages();
@@ -493,18 +494,6 @@ $("#new-doc").addEventListener("click", foreground(() => serialized(() => {
   notice("");
 })));
 
-const backupInput = $("#backup-file");
-$("#restore").addEventListener("click", () => backupInput.click());
-backupInput.addEventListener("change", foreground(async () => {
-  const file = backupInput.files[0];
-  backupInput.value = "";
-  if (!file) return;
-  const scan = await readBackup(file);
-  await serialized(() => commit(scan));
-  navigator.storage?.persist?.().catch(() => {});
-  notice("Respaldo importado como un documento en la biblioteca.");
-}));
-
 $("#delete-doc").addEventListener("click", foreground(() => serialized(async () => {
   if (!current.updated || !confirm("¿Eliminar este documento de la biblioteca de este dispositivo?")) return;
   await libraryWrite(async () => deleteScan(await library, current));
@@ -533,34 +522,27 @@ const exportProgress = $("#export-progress");
 const cancelExport = $("#cancel-export");
 
 cancelExport.addEventListener("click", () => exportController?.abort());
-$("#generate").addEventListener("click", foreground(async () => {
-  const snapshot = await serialized(() => current);
-  const count = snapshot.pages.length;
-  if (!count) return;
+async function withExportProgress(count, format, run) {
   exportController = new AbortController();
   const { signal } = exportController;
   cancelExport.disabled = false;
-  exportLabel.textContent = "Preparando PDF…";
+  exportLabel.textContent = "Preparando " + format + "…";
   exportProgress.max = count;
   exportProgress.removeAttribute("value");
   exportJob.hidden = false;
   notice("");
-  try {
-    const pdf = await exportPdf(snapshot, (page) => {
-      exportProgress.value = page - 1;
-      exportLabel.textContent = "Optimizando página " + page + " de " + count + "…";
-    }, signal);
+  const progress = (page) => {
+    exportProgress.value = page - 1;
+    exportLabel.textContent = "Procesando página " + page + " de " + count + "…";
+  };
+  const finishing = (message) => {
     signal.throwIfAborted();
     cancelExport.disabled = true;
-    exportLabel.textContent = "Guardando PDF…";
+    exportLabel.textContent = message;
     exportProgress.value = count;
-    const stored = await serialized(() => {
-      const latest = scans.find((scan) => scan.id === snapshot.id);
-      if (!latest) throw new Error("Este documento ya no está en la biblioteca.");
-      return commit({ ...latest, pdf, pdfStale: latest.revision !== snapshot.revision }, current.id === latest.id);
-    });
-    const suffix = stored.pdfStale ? ". El documento recibió cambios durante la exportación." : "";
-    notice("PDF optimizado y guardado · " + sizeText(pdf.size) + suffix);
+  };
+  try {
+    await run(signal, progress, finishing);
   } catch (error) {
     if (error.name !== "AbortError") throw error;
     notice("Exportación cancelada. Las páginas siguen en la biblioteca.");
@@ -568,6 +550,22 @@ $("#generate").addEventListener("click", foreground(async () => {
     exportController = undefined;
     exportJob.hidden = true;
   }
+}
+
+$("#generate").addEventListener("click", foreground(async () => {
+  const snapshot = await serialized(() => current);
+  if (!snapshot.pages.length) return;
+  await withExportProgress(snapshot.pages.length, "PDF", async (signal, progress, finishing) => {
+    const pdf = await exportPdf(snapshot, progress, signal);
+    finishing("Guardando PDF…");
+    const stored = await serialized(() => {
+      const latest = scans.find((scan) => scan.id === snapshot.id);
+      if (!latest) throw new Error("Este documento ya no está en la biblioteca.");
+      return commit({ ...latest, pdf, pdfStale: latest.revision !== snapshot.revision }, current.id === latest.id);
+    });
+    const suffix = stored.pdfStale ? ". El documento recibió cambios durante la exportación." : "";
+    notice("PDF optimizado y guardado · " + sizeText(pdf.size) + suffix);
+  });
 }));
 
 function download(blob, filename) {
@@ -580,10 +578,25 @@ function download(blob, filename) {
 }
 
 $("#download").addEventListener("click", () => download(current.pdf, fileName(current.title)));
-$("#backup").addEventListener("click", foreground(() => {
-  download(makeBackup(current), fileName(current.title, "iris"));
-  notice("Respaldo listo. Puedes importarlo en otra instalación de Iris.");
-}));
+
+function downloadImages(pageId) {
+  return foreground(async () => {
+    const { title, pages } = await serialized(() => current);
+    const index = pageId ? pages.findIndex((page) => page.id === pageId) : -1;
+    if ((pageId && index < 0) || !pages.length) return;
+    const selected = pageId ? [pages[index]] : pages;
+    const multiple = selected.length > 1;
+    const suffix = pageId && pages.length > 1 ? " - " + String(index + 1).padStart(2, "0") : "";
+    await withExportProgress(selected.length, multiple ? "imágenes JPG" : "JPG", async (signal, progress, finishing) => {
+      const file = await exportImages(selected, progress, signal);
+      finishing("Preparando descarga…");
+      download(file, fileName(title, multiple ? "zip" : "jpg", suffix));
+      notice(multiple ? "ZIP listo con " + selected.length + " imágenes JPG." : "Imagen JPG lista.");
+    });
+  });
+}
+
+$("#download-images").addEventListener("click", downloadImages());
 $("#share").addEventListener("click", async () => {
   const file = new File([current.pdf], fileName(current.title), { type: "application/pdf" });
   try {

@@ -3,7 +3,7 @@
 Escáner de documentos de la familia [Auralis](https://github.com/OscarD0823/auralis). Toma fotos con el celular o el PC, corrige el papel y reúne las páginas en un PDF liviano.
 
 - [Abrir en el navegador](https://oscard0823.github.io/auralis-iris/)
-- [Descargar la beta portable para Windows x64](https://github.com/OscarD0823/auralis-iris/releases/tag/v0.1.0-beta.2)
+- [Descargar la beta portable para Windows x64](https://github.com/OscarD0823/auralis-iris/releases/tag/v0.1.0-beta.3)
 
 ## Escanear y volver a usar un documento
 
@@ -41,7 +41,7 @@ Esta modalidad usa un canal WebRTC cifrado y directo, sin servidor de archivos. 
 
 Cada navegador guarda sus propias páginas editables y PDF en IndexedDB. La web y el programa portable usan bibliotecas separadas.
 
-Abre un documento y elige **Descargar respaldo** para guardar un archivo `.iris` con las fotos, el recorte, el orden, los acabados y el PDF guardado. Usa **Importar respaldo** en Iris beta.2 o posterior para recuperarlo como un documento nuevo. Guarda los respaldos fuera del navegador antes de limpiar sus datos o cambiar de equipo.
+Usa **JPG** debajo de una página para descargar esa imagen con su recorte, giro y acabado. El botón **Descargar JPG** descarga la imagen directamente en un documento de una sola página. Para varias páginas, **Descargar JPG (ZIP)** las reúne como JPG numerados. Extrae el ZIP para abrir las imágenes en tu visor de fotos o volver a agregarlas con **Importar fotos**.
 
 GitHub aloja el código, la aplicación y las descargas del programa.
 
@@ -56,6 +56,6 @@ pwsh -File scripts/build-windows.ps1
 
 El servidor local abre `http://127.0.0.1:53129/`. GitHub Actions publica `app/` en GitHub Pages al cambiar `main`.
 
-Ejecuta `node --test` para comprobar el formato de respaldo y el empaquetado de imágenes en blanco y negro.
+Ejecuta `node --test` para comprobar las descargas JPG, el orden de las páginas en el ZIP y el empaquetado de imágenes en blanco y negro.
 
 El código de Auralis Iris se publica bajo AGPL-3.0-or-later, como el resto de Auralis. Las bibliotecas incluidas conservan [sus propias licencias](THIRD-PARTY.md).

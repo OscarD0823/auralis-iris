@@ -15,6 +15,11 @@ export function fullFrame() {
   return [[0, 0], [1, 0], [1, 1], [0, 1]];
 }
 
+export function isFullFrame(quad) {
+  const frame = fullFrame();
+  return quad.every(([x, y], index) => x === frame[index][0] && y === frame[index][1]);
+}
+
 function canvasAt(width, height) {
   if (typeof document === "undefined") return new OffscreenCanvas(width, height);
   const canvas = document.createElement("canvas");
@@ -245,9 +250,7 @@ export function packMonochrome({ data, width, height }) {
 }
 
 export async function renderScan(page, maxEdge) {
-  const original = fullFrame();
-  const cropped = page.width > 1 && page.height > 1 &&
-    page.quad.some(([x, y], index) => x !== original[index][0] || y !== original[index][1]);
+  const cropped = page.width > 1 && page.height > 1 && !isFullFrame(page.quad);
   const resolution = cropped ? cropResolution(page, maxEdge) : null;
   const source = await orientedPage(page, resolution?.edge ?? maxEdge);
   let result = source;
