@@ -1,4 +1,4 @@
-import { MAX_FILE, newId } from "./scan.js";
+import { MAX_FILE, newId, validQuad } from "./scan.js";
 
 const $ = (selector) => document.querySelector(selector);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -29,11 +29,22 @@ async function loadVendor(file) {
   }
 }
 
-function makePacket(blob, name, id = newId()) {
+function makePacket(blob, name, id = newId(), quad) {
   if (!types.has(blob.type) || !blob.size || blob.size > MAX_FILE || !idPattern.test(id)) {
     throw new Error("Solo puedes enviar fotos y PDF de hasta 40 MB.");
   }
-  return { id, name: name.slice(0, 120).toWellFormed(), type: blob.type, size: blob.size };
+  const packet = { id, name: name.slice(0, 120).toWellFormed(), type: blob.type, size: blob.size };
+  if (blob.type === "image/jpeg" && validQuad(quad)) packet.quad = quad;
+  return packet;
+}
+
+function readQuad(header) {
+  if (!header || header.length > 256) return undefined;
+  try {
+    return JSON.parse(header);
+  } catch {
+    return undefined;
+  }
 }
 
 async function validFile(blob) {
@@ -85,7 +96,7 @@ function lanLink(key, isGuest, receive, state) {
         const blob = await response.blob();
         if (await validFile(blob)) {
           const name = decodeURIComponent(response.headers.get("X-Iris-Name") || "Archivo");
-          await receive(blob, name, id);
+          await receive(blob, name, id, readQuad(response.headers.get("X-Iris-Quad")));
         }
         await api("inbox", { method: "DELETE", key, headers: { "X-Iris-ID": id } });
       }
@@ -105,11 +116,12 @@ function lanLink(key, isGuest, receive, state) {
   return {
     isGuest,
     start: poll,
-    async send(blob, name, id) {
-      const packet = makePacket(blob, name, id);
+    async send(blob, name, id, quad) {
+      const packet = makePacket(blob, name, id, quad);
+      const headers = { "Content-Type": packet.type, "X-Iris-ID": packet.id, "X-Iris-Name": encodeURIComponent(packet.name) };
+      if (packet.quad) headers["X-Iris-Quad"] = JSON.stringify(packet.quad);
       await api("inbox", {
-        method: "POST", key, body: blob,
-        headers: { "Content-Type": packet.type, "X-Iris-ID": packet.id, "X-Iris-Name": encodeURIComponent(packet.name) }
+        method: "POST", key, body: blob, headers
       });
       const until = Date.now() + 35000;
       while (!closed && Date.now() < until) {
@@ -172,14 +184,14 @@ function rtcLink(isGuest, receive, state) {
       }
       incoming.chunks.push(data);
       if (incoming.received !== incoming.size) return;
-      const { id, name, type, chunks } = incoming;
+      const { id, name, type, chunks, quad } = incoming;
       incoming = null;
       saving = true;
       let ack = false;
       try {
         const blob = new Blob(chunks, { type });
         if (await validFile(blob)) {
-          await receive(blob, name, id);
+          await receive(blob, name, id, quad);
           ack = true;
         }
       } catch {
@@ -206,9 +218,9 @@ function rtcLink(isGuest, receive, state) {
   return {
     pc,
     isGuest,
-    async send(blob, name, id) {
+    async send(blob, name, id, quad) {
       if (channel?.readyState !== "open" || sending) throw new Error("Espera a que el otro dispositivo esté listo.");
-      const packet = makePacket(blob, name, id);
+      const packet = makePacket(blob, name, id, quad);
       sending = true;
       let timer;
       try {
@@ -552,9 +564,9 @@ export function setupPair({ receive, onChange }) {
     show();
   }
   return {
-    send(blob, name, id) {
+    send(blob, name, id, quad) {
       if (!link || !active) throw new Error("Conecta el otro dispositivo para enviar el archivo.");
-      return link.send(blob, name, id);
+      return link.send(blob, name, id, quad);
     }
   };
 }

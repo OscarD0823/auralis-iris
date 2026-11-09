@@ -3,12 +3,12 @@
 Escáner de documentos de la familia [Auralis](https://github.com/OscarD0823/auralis). Toma fotos con el celular o el PC, corrige el papel y reúne las páginas en un PDF liviano.
 
 - [Abrir en el navegador](https://oscard0823.github.io/auralis-iris/)
-- [Descargar la beta portable para Windows x64](https://github.com/OscarD0823/auralis-iris/releases/tag/v0.1.0-beta.3)
+- [Descargar la beta portable para Windows x64](https://github.com/OscarD0823/auralis-iris/releases/tag/v0.1.0-beta.4)
 
 ## Escanear y volver a usar un documento
 
-1. Abre Iris y elige **Tomar foto** o **Importar fotos**. La aplicación guarda cada página en la biblioteca del dispositivo.
-2. Pulsa una página para girarla, corregir sus cuatro esquinas o elegir su acabado. **Detectar bordes** sugiere las esquinas cuando el papel se distingue del fondo. Para hojas de texto impreso, **Blanco y negro** separa la tinta del papel y guarda la imagen con un bit por píxel.
+1. Abre Iris y elige **Tomar foto** o **Importar fotos**. Al identificar las cuatro esquinas, Iris recorta la hoja y corrige la perspectiva para la miniatura y las descargas. La biblioteca guarda la foto completa para que puedas ajustar el recorte.
+2. Pulsa una página para girarla, mover sus esquinas o elegir su acabado. **Detectar bordes** repite la búsqueda y **Marco completo** recupera todo el encuadre. Para hojas de texto impreso, **Blanco y negro** separa la tinta del papel y guarda la imagen con un bit por píxel.
 3. Ordena las páginas y elige **Ligero**, **Equilibrado** o **Nítido**. **Generar PDF** muestra el avance y el tamaño final. Puedes cancelar la exportación y conservar el documento editable.
 4. Abre el documento desde **Biblioteca** para agregar páginas, cambiar los ajustes o volver a descargar el PDF. Si cambias el documento, la biblioteca conserva el PDF anterior hasta que lo actualices.
 
@@ -56,6 +56,6 @@ pwsh -File scripts/build-windows.ps1
 
 El servidor local abre `http://127.0.0.1:53129/`. GitHub Actions publica `app/` en GitHub Pages al cambiar `main`.
 
-Ejecuta `node --test` para comprobar las descargas JPG, el orden de las páginas en el ZIP y el empaquetado de imágenes en blanco y negro.
+Ejecuta `node --test` para comprobar la detección de bordes, las descargas JPG, el orden de las páginas en el ZIP y el empaquetado de imágenes en blanco y negro.
 
 El código de Auralis Iris se publica bajo AGPL-3.0-or-later, como el resto de Auralis. Las bibliotecas incluidas conservan [sus propias licencias](THIRD-PARTY.md).

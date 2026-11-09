@@ -66,6 +66,7 @@ textarea { resize: vertical; overflow-wrap: anywhere; }
 .danger:hover { background: #fff0ec; }
 .empty-pages { display: grid; justify-items: center; margin-block: 15px; padding: 23px 13px 26px; border: 1px dashed #abc7b8; border-radius: 12px; background: #f7faf7; text-align: center; }
 .empty-pages svg { width: 86px; margin-bottom: 6px; }
+.capture-help { margin-top: 8px; }
 .empty-pages p { margin-top: 6px; color: var(--muted); font-size: .86rem; }
 .pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 9px; }
 .pages:not(:empty) { margin-block: 15px; }

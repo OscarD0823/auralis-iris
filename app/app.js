@@ -1,4 +1,4 @@
-import { MAX_PAGES, makePage, rotatePage, validQuad, fullFrame, detectEdges, orientedPage, renderScan, jpeg, newId } from "./scan.js";
+import { MAX_PAGES, makePage, rotatePage, validQuad, fullFrame, isFullFrame, detectEdges, orientedPage, renderScan, jpeg, newId } from "./scan.js";
 import { openLibrary, readScans, saveScan, deleteScan } from "./store.js";
 import { setupPair } from "./pair.js";
 import { exportImages, exportPdf } from "./export.js";
@@ -224,6 +224,7 @@ function render(updateTitle = false) {
   $("#page-count").textContent = pdfOnly ? "PDF recibido" : pageText(current.pages.length);
   $("#profile").value = current.profile;
   $("#capture-actions").hidden = pdfOnly;
+  $("#capture-help").hidden = pdfOnly;
   $("#pdf-controls").hidden = pdfOnly;
   $("#empty-pages").hidden = pdfOnly || current.pages.length > 0;
   $("#generate").textContent = current.pdfStale ? "Actualizar PDF" : "Generar PDF";
@@ -276,25 +277,27 @@ async function addFiles(files) {
     }
   }
   if (added.length) navigator.storage?.persist?.().catch(() => {});
+  const cropped = added.filter((page) => !isFullFrame(page.quad)).length;
+  const cropNotice = cropped ? "Recorte automático en " + pageText(cropped) + "." : "";
   if (guest && connected && added.length) {
     for (const [index, page] of added.entries()) {
       notice("Enviando " + (index + 1) + " de " + added.length + "…");
       try {
-        await pairing.send(page.blob, current.title, page.id);
+        await pairing.send(page.blob, current.title, page.id, page.quad);
       } catch (error) {
         notice("Las páginas están en la biblioteca de este dispositivo. " + error.message, true);
         return;
       }
     }
     const sent = added.length === 1 ? "Página guardada y enviada." : pageText(added.length) + " guardadas y enviadas.";
-    notice(sent + (warning ? " " + warning : ""), Boolean(warning));
+    notice([sent, cropNotice, warning].filter(Boolean).join(" "), Boolean(warning));
   } else {
     const saved = added.length === 1 ? "Página guardada." : pageText(added.length) + " guardadas.";
-    notice([added.length ? saved : "", warning].filter(Boolean).join(" "), Boolean(warning));
+    notice([added.length ? saved : "", cropNotice, warning].filter(Boolean).join(" "), Boolean(warning));
   }
 }
 
-async function receiveFile(blob, title, id) {
+async function receiveFile(blob, title, id, quad) {
   return serialized(async () => {
     if (scans.some((scan) => scan.id === id || scan.pages.some((page) => page.id === id))) return;
     if (blob.type === "application/pdf") {
@@ -303,12 +306,12 @@ async function receiveFile(blob, title, id) {
       notice("PDF recibido. Ábrelo desde la biblioteca.");
       return;
     }
-    const page = await makePage(blob, id);
+    const page = await makePage(blob, id, quad);
     let scan = writableScan();
     if (scan.pages.length >= MAX_PAGES) scan = { ...emptyScan(), title: displayTitle(title) };
     if (!scan.updated) scan = { ...scan, title: displayTitle(title) };
     await commit(changeDraft(scan, { pages: [...scan.pages, page] }));
-    notice("Página recibida y guardada.");
+    notice(isFullFrame(page.quad) ? "Página recibida y guardada." : "Página recibida y guardada con el recorte aplicado.");
   });
 }
 
@@ -426,7 +429,7 @@ $("#send-page").addEventListener("click", foreground(async () => {
   const title = current.title;
   pageDialog.close();
   const blob = await jpeg(await renderScan(page, 2480), .88);
-  await pairing.send(blob, title);
+  await pairing.send(blob, title, undefined, fullFrame());
   notice("Página enviada y guardada en el otro dispositivo.");
 }));
 
@@ -456,7 +459,7 @@ async function openCamera() {
     video.srcObject = stream;
     await video.play();
     $("#capture").disabled = false;
-    $("#camera-hint").textContent = "Centra el documento en el encuadre.";
+    $("#camera-hint").textContent = "Deja visibles las cuatro esquinas de la hoja.";
   } catch {
     $("#camera-hint").textContent = "No se pudo abrir la cámara. Revisa el permiso o cierra esta ventana e importa una foto.";
   }

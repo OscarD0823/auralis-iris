@@ -1,3 +1,5 @@
+import { DETECTION_EDGE, findDocumentQuad } from "./edges.js";
+
 export const MAX_PAGES = 60;
 export const MAX_FILE = 40 * 1024 * 1024;
 export const SOURCE_EDGE = 2800;
@@ -41,7 +43,7 @@ export async function jpeg(canvas, quality) {
   return blob;
 }
 
-export async function makePage(file, id = newId()) {
+export async function makePage(file, id = newId(), receivedQuad) {
   if (!file.size || file.size > MAX_FILE || file.type === "image/svg+xml") {
     throw new Error("Elige una foto válida de hasta 40 MB.");
   }
@@ -58,8 +60,13 @@ export async function makePage(file, id = newId()) {
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(image, 0, 0, width, height);
-    const blob = await jpeg(canvas, .92);
-    return { id, blob, width, height, turns: 0, quad: fullFrame(), filter: "color" };
+    try {
+      const blob = await jpeg(canvas, .92);
+      const page = { id, blob, width, height, turns: 0, quad: fullFrame(), filter: "color" };
+      return await autoCropPage(page, canvas, receivedQuad);
+    } finally {
+      canvas.width = canvas.height = 1;
+    }
   } finally {
     image.close();
   }
@@ -71,6 +78,8 @@ export function rotatePage(page) {
 }
 
 export function validQuad(quad) {
+  if (!Array.isArray(quad) || quad.length !== 4 ||
+      !quad.every((point) => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite))) return false;
   return quad.every(([x, y], index) => {
     const [nextX, nextY] = quad[(index + 1) % 4];
     const [lastX, lastY] = quad[(index + 2) % 4];
@@ -96,39 +105,41 @@ export async function orientedPage(page, maxEdge = SOURCE_EDGE) {
   return canvas;
 }
 
-export async function detectEdges(page) {
-  const canvas = await orientedPage(page, 220);
+function detectInCanvas(canvas) {
   const { width, height } = canvas;
-  if (width < 20 || height < 20) return null;
-  const { data } = canvas.getContext("2d").getImageData(0, 0, width, height);
-  const light = (x, y) => {
-    const offset = (y * width + x) * 4;
-    return (data[offset] * 54 + data[offset + 1] * 183 + data[offset + 2] * 19) / 256;
-  };
-  const border = [];
-  for (let x = 0; x < width; x += 3) border.push(light(x, 0), light(x, height - 1));
-  for (let y = 0; y < height; y += 3) border.push(light(0, y), light(width - 1, y));
-  border.sort((a, b) => a - b);
-  const threshold = Math.max(145, border[Math.floor(border.length * .75)] + 36);
-  if (threshold > 238) return null;
-  const best = [-Infinity, -Infinity, -Infinity, -Infinity];
-  const corners = fullFrame();
-  let count = 0;
-  for (let y = 2; y < height - 2; y++) {
-    for (let x = 2; x < width - 2; x++) {
-      if (light(x, y) < threshold || light(x - 2, y) < threshold || light(x + 2, y) < threshold ||
-          light(x, y - 2) < threshold || light(x, y + 2) < threshold) continue;
-      count++;
-      const scores = [-x - y, x - y, x + y, y - x];
-      for (let corner = 0; corner < 4; corner++) {
-        if (scores[corner] > best[corner]) {
-          best[corner] = scores[corner];
-          corners[corner] = [x / (width - 1), y / (height - 1)];
-        }
-      }
-    }
+  const quad = findDocumentQuad(canvas.getContext("2d").getImageData(0, 0, width, height));
+  return validQuad(quad) ? quad : null;
+}
+
+async function autoCropPage(page, source, receivedQuad) {
+  const supplied = validQuad(receivedQuad) ? receivedQuad : null;
+  if (supplied && isFullFrame(supplied)) return page;
+  const [width, height] = fit(page.width, page.height, DETECTION_EDGE);
+  const preview = canvasAt(width, height);
+  let thumbnail;
+  try {
+    preview.getContext("2d", { alpha: false, willReadFrequently: true }).drawImage(source, 0, 0, width, height);
+    const quad = supplied ?? detectInCanvas(preview);
+    if (!quad) return page;
+    const { outWidth, outHeight } = cropResolution({ ...page, quad }, 360);
+    thumbnail = deskew(preview, quad, outWidth, outHeight);
+    return { ...page, quad, thumb: await jpeg(thumbnail, .78) };
+  } catch {
+    // A detection or preview failure must not discard a captured photo.
+    return supplied ? { ...page, quad: supplied } : page;
+  } finally {
+    preview.width = preview.height = 1;
+    if (thumbnail) thumbnail.width = thumbnail.height = 1;
   }
-  return count > width * height * .16 && validQuad(corners) ? corners : null;
+}
+
+export async function detectEdges(page) {
+  const canvas = await orientedPage(page, DETECTION_EDGE);
+  try {
+    return detectInCanvas(canvas);
+  } finally {
+    canvas.width = canvas.height = 1;
+  }
 }
 
 function projection([[x0, y0], [x1, y1], [x2, y2], [x3, y3]]) {

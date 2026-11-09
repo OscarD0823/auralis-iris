@@ -33,6 +33,7 @@ var transferID = regexp.MustCompile("^[a-f0-9]{32}$")
 
 type parcel struct {
 	id, name, kind string
+	quad           string
 	data           []byte
 }
 
@@ -164,6 +165,9 @@ func (s *relay) exchange(w http.ResponseWriter, r *http.Request, local bool) {
 		}
 		w.Header().Set("X-Iris-ID", message.id)
 		w.Header().Set("X-Iris-Name", message.name)
+		if message.quad != "" {
+			w.Header().Set("X-Iris-Quad", message.quad)
+		}
 		w.Header().Set("Content-Type", message.kind)
 		w.Header().Set("Content-Length", strconv.Itoa(len(message.data)))
 		w.Write(message.data)
@@ -199,6 +203,10 @@ func (s *relay) acceptFile(w http.ResponseWriter, r *http.Request, pair *pairing
 		s.mu.Unlock()
 	}()
 	id, name, kind := r.Header.Get("X-Iris-ID"), r.Header.Get("X-Iris-Name"), r.Header.Get("Content-Type")
+	quad := r.Header.Get("X-Iris-Quad")
+	if kind != "image/jpeg" || len(quad) > 256 {
+		quad = ""
+	}
 	if !transferID.MatchString(id) || len(name) > 1440 || (kind != "image/jpeg" && kind != "application/pdf") {
 		http.Error(w, "Archivo no admitido.", http.StatusBadRequest)
 		return
@@ -219,7 +227,7 @@ func (s *relay) acceptFile(w http.ResponseWriter, r *http.Request, pair *pairing
 		http.Error(w, "La vinculación terminó.", http.StatusGone)
 		return
 	}
-	pair.inbox[recipient] = &parcel{id: id, name: name, kind: kind, data: data}
+	pair.inbox[recipient] = &parcel{id: id, name: name, kind: kind, quad: quad, data: data}
 	w.WriteHeader(http.StatusAccepted)
 }
 
