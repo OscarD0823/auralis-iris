@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102f2a">
+  <meta name="description" content="Escanea documentos, crea PDF ligeros y conecta la cámara del celular por la red local.">
+  <meta name="referrer" content="no-referrer">
+  <title>Auralis Iris · BETA</title>
+  <link rel="icon" href="./iris.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./iris-192.png">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
+  <script defer src="./vendor/pdf-lib.js"></script>
+  <script defer src="./vendor/qrcode.js"></script>
+  <script defer src="./vendor/jsqr.js"></script>
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="frame topbar-inner">
+      <a class="brand" href="./" aria-label="Inicio de Auralis Iris"><img src="./iris.svg" alt="" width="40" height="40"><span>Auralis <strong>Iris</strong></span><span class="beta">BETA</span></a>
+      <nav aria-label="Acciones de la aplicación">
+        <button id="install" type="button" class="top-link">Instalar</button>
+        <button id="pair" type="button" class="top-button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18h2"/></svg>
+          <span>Conectar celular</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+  <main class="frame">
+    <section class="hero" aria-labelledby="heading">
+      <p class="kicker"><span></span> AURALIS · DOCUMENTOS</p>
+      <h1 id="heading">De una foto a un PDF.</h1>
+      <p>Escanea varias páginas, ajusta sus bordes y guárdalas en un solo archivo. Tus documentos quedan en este dispositivo.</p>
+    </section>
+    <p id="connection-banner" class="connection-banner" hidden></p>
+    <div class="workspace">
+      <aside class="library panel" aria-labelledby="library-title">
+        <div class="panel-heading">
+          <div><span class="eyebrow">GUARDADOS EN ESTE DISPOSITIVO</span><h2 id="library-title">Biblioteca</h2></div>
+          <button id="new-doc" type="button" class="outline small" aria-label="Crear un documento nuevo">+ Nuevo</button>
+        </div>
+        <ul id="library" class="library-list"></ul>
+        <p id="library-empty" class="muted small-text">Tus escaneos aparecerán aquí cuando agregues la primera foto.</p>
+      </aside>
+      <section class="editor panel" aria-labelledby="editor-title">
+        <div class="panel-heading">
+          <div><span class="eyebrow">MESA DE ESCANEO</span><h2 id="editor-title">Documento</h2></div>
+          <span id="page-count" class="pill">0 páginas</span>
+        </div>
+        <label class="field title-field" for="doc-name"><span>Nombre del documento</span>
+          <input id="doc-name" type="text" value="" placeholder="Escaneo sin título" maxlength="120" autocomplete="off">
+        </label>
+        <div id="capture-actions" class="actions">
+          <button id="take-photo" type="button" class="primary">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h4l2-3h4l2 3h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            <span>Tomar foto</span>
+          </button>
+          <button id="import" type="button" class="outline">Importar fotos</button>
+          <input id="camera-file" type="file" accept="image/*" capture="environment" hidden>
+          <input id="image-files" type="file" accept="image/*" multiple hidden>
+        </div>
+        <div id="empty-pages" class="empty-pages">
+          <svg viewBox="0 0 104 92" aria-hidden="true">
+            <rect x="25" y="11" width="50" height="65" rx="5" transform="rotate(-13 50 43)" fill="#dcece6" stroke="#93b4a7"/>
+            <rect x="36" y="13" width="45" height="61" rx="5" fill="#fff" stroke="#86ad9c"/>
+            <path d="M47 28h21m-21 9h21m-21 9h14m-14 9h18" stroke="#98b9ad" stroke-width="2" stroke-linecap="round"/>
+            <path d="M17 34V20h14m43 0h14v14m0 22v14H74m-43 0H17V56" fill="none" stroke="#14765d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M14 47h77" stroke="#23876b" stroke-dasharray="3 4" stroke-linecap="round"/>
+          </svg>
+          <strong>Agrega la primera página</strong>
+          <p>Usa la cámara, elige fotos guardadas o conecta tu celular.</p>
+        </div>
+        <ol id="pages" class="pages"></ol>
+        <div id="pdf-controls" class="pdf-controls">
+          <label class="field" for="profile"><span>Optimización del PDF</span>
+            <select id="profile">
+              <option value="small">Ligero</option>
+              <option value="balanced" selected>Equilibrado</option>
+              <option value="sharp">Nítido</option>
+            </select>
+          </label>
+          <button id="generate" type="button" class="primary" disabled>Generar PDF</button>
+        </div>
+        <div id="pdf-result" class="pdf-result" hidden>
+          <div><strong>PDF guardado</strong><span id="pdf-size" class="muted"></span></div>
+          <div class="actions">
+            <button id="download" type="button" class="outline small">Descargar</button>
+            <button id="share" type="button" class="outline small">Compartir archivo</button>
+            <button id="send-pdf" type="button" class="outline small" hidden>Enviar al otro dispositivo</button>
+          </div>
+        </div>
+        <div class="editor-footer"><button id="delete-doc" type="button" class="text-button danger" hidden>Eliminar documento</button><span class="muted small-text">Guardado local</span></div>
+      </section>
+    </div>
+    <p id="status" class="status" role="status" aria-live="polite" hidden></p>
+    <footer class="footer">
+      <span>Auralis Iris · 0.1.0-beta.1</span>
+      <a href="https://github.com/OscarD0823/auralis-iris/releases/tag/v0.1.0-beta.1">Descargar para Windows</a>
+      <a href="https://github.com/OscarD0823/auralis-iris">Código en GitHub</a>
+    </footer>
+  </main>
+  <dialog id="page-dialog" aria-labelledby="page-title">
+    <div class="dialog-heading"><h2 id="page-title">Ajustar página</h2><button type="button" class="icon-button" data-close aria-label="Cerrar">×</button></div>
+    <p class="muted small-text">Arrastra los cuatro puntos hasta los bordes del papel. También puedes moverlos con las flechas del teclado.</p>
+    <div id="crop-surface" class="crop-surface">
+      <img id="crop-preview" alt="Vista previa de la página">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon id="crop-outline"/></svg>
+      <button type="button" class="corner" data-corner="0" aria-label="Esquina superior izquierda"></button>
+      <button type="button" class="corner" data-corner="1" aria-label="Esquina superior derecha"></button>
+      <button type="button" class="corner" data-corner="2" aria-label="Esquina inferior derecha"></button>
+      <button type="button" class="corner" data-corner="3" aria-label="Esquina inferior izquierda"></button>
+    </div>
+    <div class="actions page-tools">
+      <button type="button" id="rotate" class="outline small">Girar 90°</button>
+      <button type="button" id="auto-crop" class="outline small">Detectar bordes</button>
+      <button type="button" id="reset-crop" class="text-button">Marco completo</button>
+    </div>
+    <p id="crop-hint" class="muted small-text" aria-live="polite" hidden></p>
+    <label class="field" for="filter"><span>Acabado de página</span>
+      <select id="filter"><option value="color">Color</option><option value="gray">Grises</option><option value="text">Texto con contraste</option></select>
+    </label>
+    <div class="actions dialog-actions">
+      <button type="button" id="send-page" class="outline" hidden>Enviar página</button>
+      <button type="button" id="apply-page" class="primary">Guardar ajustes</button>
+    </div>
+  </dialog>
+  <dialog id="camera-dialog" aria-labelledby="camera-title">
+    <div class="dialog-heading"><h2 id="camera-title">Cámara</h2><button type="button" class="icon-button" data-close aria-label="Cerrar">×</button></div>
+    <video id="camera-video" autoplay playsinline muted></video>
+    <p id="camera-hint" class="muted small-text" role="status"></p>
+    <div class="actions dialog-actions"><button id="capture" type="button" class="primary">Capturar página</button></div>
+  </dialog>
+  <dialog id="pair-dialog" aria-labelledby="pair-title">
+    <div class="dialog-heading"><h2 id="pair-title">Conectar dispositivos</h2><button type="button" class="icon-button" data-close aria-label="Cerrar">×</button></div>
+    <div id="pair-content"></div>
+    <p id="pair-status" class="muted small-text" role="status"></p>
+  </dialog>
+  <dialog id="install-dialog" aria-labelledby="install-title">
+    <div class="dialog-heading"><h2 id="install-title">Instalar Auralis Iris</h2><button type="button" class="icon-button" data-close aria-label="Cerrar">×</button></div>
+    <p><strong>Windows</strong> · Usa la opción <em>Instalar esta aplicación</em> de Edge o Chrome. La edición portable abre el escáner y permite conectar el celular con un solo QR.</p>
+    <p><strong>Android</strong> · En Chrome, abre el menú y elige <em>Instalar aplicación</em> o <em>Añadir a pantalla de inicio</em>.</p>
+    <p><strong>iPhone y iPad</strong> · En Safari, abre <em>Compartir</em> y elige <em>Añadir a pantalla de inicio</em>.</p>
+    <p><a href="https://github.com/OscarD0823/auralis-iris/releases/tag/v0.1.0-beta.1">Descargar la beta para Windows</a></p>
+  </dialog>
+</body>
+</html>
