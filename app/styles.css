@@ -48,6 +48,7 @@ button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke
 .library-entry:hover, .library-entry[aria-current="true"] { background: #edf6f0; border-color: #c7dfd2; }
 .library-entry strong { overflow-wrap: anywhere; }
 .library-entry span { font-size: .78rem; color: var(--muted); }
+.library-tools { margin-top: 12px; }
 .pill { white-space: nowrap; border-radius: 100px; padding: 5px 10px; background: #eef5ef; color: var(--accent-dark); font-size: .8rem; font-weight: 650; }
 .field { display: grid; gap: 6px; color: var(--muted); font-size: .82rem; font-weight: 650; }
 .title-field { margin-block: 16px 12px; }
@@ -79,8 +80,11 @@ textarea { resize: vertical; overflow-wrap: anywhere; }
 .pdf-result, .connection-banner { border: 1px solid #b9d9c8; border-radius: 10px; background: #eff8f1; padding: 12px; }
 .pdf-result { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 15px; }
 .pdf-result > div:first-child { display: grid; gap: 3px; }
+.export-job { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 12px; margin-top: 15px; }
+.export-job label { grid-column: 1 / -1; color: var(--muted); font-size: .875rem; }
+.export-job progress { width: 100%; accent-color: var(--accent); }
 .connection-banner { margin-bottom: 13px; color: var(--accent-dark); font-size: .93rem; }
-.editor-footer { margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--line); }
+.editor-footer { flex-wrap: wrap; margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--line); }
 .editor-footer span { margin-inline-start: auto; }
 .status { margin-top: 14px; padding: 10px 12px; background: #edf6f0; border-radius: 8px; overflow-wrap: anywhere; }
 .status.error { color: #832828; background: #ffefed; }

@@ -1,6 +1,8 @@
-import { MAX_PAGES, makePage, rotatePage, validQuad, fullFrame, detectEdges, orientedPage, renderScan, jpeg, makePdf, newId } from "./scan.js";
+import { MAX_PAGES, makePage, rotatePage, validQuad, fullFrame, detectEdges, orientedPage, renderScan, jpeg, newId } from "./scan.js";
 import { openLibrary, readScans, saveScan, deleteScan } from "./store.js";
 import { setupPair } from "./pair.js";
+import { exportPdf } from "./export.js";
+import { makeBackup, readBackup } from "./backup.js";
 
 const $ = (selector) => document.querySelector(selector);
 const pageDialog = $("#page-dialog");
@@ -27,6 +29,7 @@ let guest = false;
 let busy = false;
 let queue = Promise.resolve();
 let installPrompt;
+let exportController;
 
 const library = openLibrary();
 const pairing = setupPair({ receive: receiveFile, onChange: connectionChanged });
@@ -72,8 +75,8 @@ function displayTitle(title) {
   return title.trim().slice(0, 120) || "Escaneo sin título";
 }
 
-function fileName(title) {
-  return (displayTitle(title).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/[. ]+$/g, "") || "Escaneo") + ".pdf";
+function fileName(title, extension = "pdf") {
+  return (displayTitle(title).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/[. ]+$/g, "") || "Escaneo") + "." + extension;
 }
 
 function create(tag, className, value) {
@@ -128,6 +131,14 @@ async function commit(scan, select = true) {
   return stored;
 }
 
+function isReceivedPdf(scan) {
+  return Boolean(scan.pdf && !scan.pages.length && !scan.pdfStale);
+}
+
+function changeDraft(scan, changes) {
+  return { ...scan, ...changes, pdfStale: Boolean(scan.pdf) && !isReceivedPdf(scan) };
+}
+
 function renderLibrary() {
   const list = $("#library");
   list.replaceChildren();
@@ -138,7 +149,7 @@ function renderLibrary() {
     entry.type = "button";
     entry.disabled = busy;
     if (scan.id === current.id) entry.setAttribute("aria-current", "true");
-    const info = scan.pages.length ? pageText(scan.pages.length) : (scan.pdf ? "PDF recibido" : "Sin páginas");
+    const info = scan.pages.length ? pageText(scan.pages.length) : (isReceivedPdf(scan) ? "PDF recibido" : "Sin páginas");
     entry.append(create("strong", "", scan.title), create("span", "", info + " · " + dateFormat.format(scan.updated)));
     entry.addEventListener("click", foreground(() => serialized(() => selectScan(scans.find((item) => item.id === scan.id) ?? scan))));
     item.append(entry);
@@ -185,12 +196,14 @@ function renderPages() {
 }
 
 function setControls() {
-  const pdfOnly = Boolean(current.pdf && !current.pages.length);
+  const pdfOnly = isReceivedPdf(current);
   const count = current.pages.length;
   $("#take-photo").disabled = busy || count >= MAX_PAGES;
   $("#import").disabled = busy || count >= MAX_PAGES;
   $("#generate").disabled = busy || count === 0;
   $("#new-doc").disabled = busy;
+  $("#restore").disabled = busy;
+  $("#backup").disabled = busy;
   $("#delete-doc").disabled = busy;
   $("#download").disabled = busy;
   $("#share").disabled = busy;
@@ -206,15 +219,18 @@ function setControls() {
 }
 
 function render(updateTitle = false) {
-  const pdfOnly = Boolean(current.pdf && !current.pages.length);
+  const pdfOnly = isReceivedPdf(current);
   if (updateTitle || document.activeElement !== nameInput) nameInput.value = current.updated ? current.title : "";
   $("#page-count").textContent = pdfOnly ? "PDF recibido" : pageText(current.pages.length);
   $("#profile").value = current.profile;
   $("#capture-actions").hidden = pdfOnly;
   $("#pdf-controls").hidden = pdfOnly;
   $("#empty-pages").hidden = pdfOnly || current.pages.length > 0;
+  $("#generate").textContent = current.pdfStale ? "Actualizar PDF" : "Generar PDF";
   $("#pdf-result").hidden = !current.pdf;
+  $("#pdf-label").textContent = current.pdfStale ? "PDF guardado · versión anterior" : "PDF guardado";
   if (current.pdf) $("#pdf-size").textContent = sizeText(current.pdf.size);
+  $("#backup").hidden = !current.pdf && !current.pages.length;
   $("#delete-doc").hidden = !current.updated;
   renderLibrary();
   renderPages();
@@ -229,12 +245,12 @@ function changePage(id, offset) {
     if (offset === 0 && !confirm("¿Quitar esta página del documento?")) return;
     const [page] = pages.splice(index, 1);
     if (offset !== 0) pages.splice(index + offset, 0, page);
-    await commit({ ...current, pages, pdf: null });
+    await commit(changeDraft(current, { pages }));
   }));
 }
 
 function writableScan() {
-  return current.pdf && !current.pages.length ? emptyScan() : current;
+  return isReceivedPdf(current) ? emptyScan() : current;
 }
 
 async function addFiles(files) {
@@ -246,7 +262,7 @@ async function addFiles(files) {
       const saved = await serialized(async () => {
         const scan = writableScan();
         if (scan.pages.length >= MAX_PAGES) return false;
-        await commit({ ...scan, pages: [...scan.pages, page], pdf: null });
+        await commit(changeDraft(scan, { pages: [...scan.pages, page] }));
         return true;
       });
       if (!saved) {
@@ -290,7 +306,7 @@ async function receiveFile(blob, title, id) {
     let scan = writableScan();
     if (scan.pages.length >= MAX_PAGES) scan = { ...emptyScan(), title: displayTitle(title) };
     if (!scan.updated) scan = { ...scan, title: displayTitle(title) };
-    await commit({ ...scan, pages: [...scan.pages, page], pdf: null });
+    await commit(changeDraft(scan, { pages: [...scan.pages, page] }));
     notice("Página recibida y guardada.");
   });
 }
@@ -398,7 +414,8 @@ $("#apply-page").addEventListener("click", foreground(async () => {
   await serialized(async () => {
     const scan = scans.find((item) => item.id === scanId);
     if (!scan) return;
-    await commit({ ...scan, pdf: null, pages: scan.pages.map((item) => item.id === adjusted.id ? adjusted : item) }, current.id === scanId);
+    const pages = scan.pages.map((item) => item.id === adjusted.id ? adjusted : item);
+    await commit(changeDraft(scan, { pages }), current.id === scanId);
   });
   notice("Ajustes de la página guardados.");
 }));
@@ -476,6 +493,18 @@ $("#new-doc").addEventListener("click", foreground(() => serialized(() => {
   notice("");
 })));
 
+const backupInput = $("#backup-file");
+$("#restore").addEventListener("click", () => backupInput.click());
+backupInput.addEventListener("change", foreground(async () => {
+  const file = backupInput.files[0];
+  backupInput.value = "";
+  if (!file) return;
+  const scan = await readBackup(file);
+  await serialized(() => commit(scan));
+  navigator.storage?.persist?.().catch(() => {});
+  notice("Respaldo importado como un documento en la biblioteca.");
+}));
+
 $("#delete-doc").addEventListener("click", foreground(() => serialized(async () => {
   if (!current.updated || !confirm("¿Eliminar este documento de la biblioteca de este dispositivo?")) return;
   await libraryWrite(async () => deleteScan(await library, current));
@@ -487,22 +516,59 @@ $("#delete-doc").addEventListener("click", foreground(() => serialized(async () 
 nameInput.addEventListener("change", () => {
   const title = displayTitle(nameInput.value);
   serialized(async () => {
-    if (current.title !== title) await commit({ ...current, title });
+    if (current.title !== title) await commit(changeDraft(current, { title }));
   }).catch((error) => notice(error.message, true));
 });
 
 $("#profile").addEventListener("change", (event) => {
   const profile = event.target.value;
   serialized(async () => {
-    if (current.profile !== profile) await commit({ ...current, profile, pdf: null });
+    if (current.profile !== profile) await commit(changeDraft(current, { profile }));
   }).catch((error) => notice(error.message, true));
 });
 
-$("#generate").addEventListener("click", foreground(() => serialized(async () => {
-  const pdf = await makePdf(current, (page) => notice("Optimizando página " + page + " de " + current.pages.length + "…"));
-  await commit({ ...current, pdf });
-  notice("PDF optimizado y guardado · " + sizeText(pdf.size));
-})));
+const exportJob = $("#export-job");
+const exportLabel = $("#export-label");
+const exportProgress = $("#export-progress");
+const cancelExport = $("#cancel-export");
+
+cancelExport.addEventListener("click", () => exportController?.abort());
+$("#generate").addEventListener("click", foreground(async () => {
+  const snapshot = await serialized(() => current);
+  const count = snapshot.pages.length;
+  if (!count) return;
+  exportController = new AbortController();
+  const { signal } = exportController;
+  cancelExport.disabled = false;
+  exportLabel.textContent = "Preparando PDF…";
+  exportProgress.max = count;
+  exportProgress.removeAttribute("value");
+  exportJob.hidden = false;
+  notice("");
+  try {
+    const pdf = await exportPdf(snapshot, (page) => {
+      exportProgress.value = page - 1;
+      exportLabel.textContent = "Optimizando página " + page + " de " + count + "…";
+    }, signal);
+    signal.throwIfAborted();
+    cancelExport.disabled = true;
+    exportLabel.textContent = "Guardando PDF…";
+    exportProgress.value = count;
+    const stored = await serialized(() => {
+      const latest = scans.find((scan) => scan.id === snapshot.id);
+      if (!latest) throw new Error("Este documento ya no está en la biblioteca.");
+      return commit({ ...latest, pdf, pdfStale: latest.revision !== snapshot.revision }, current.id === latest.id);
+    });
+    const suffix = stored.pdfStale ? ". El documento recibió cambios durante la exportación." : "";
+    notice("PDF optimizado y guardado · " + sizeText(pdf.size) + suffix);
+  } catch (error) {
+    if (error.name !== "AbortError") throw error;
+    notice("Exportación cancelada. Las páginas siguen en la biblioteca.");
+  } finally {
+    exportController = undefined;
+    exportJob.hidden = true;
+  }
+}));
 
 function download(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -514,6 +580,10 @@ function download(blob, filename) {
 }
 
 $("#download").addEventListener("click", () => download(current.pdf, fileName(current.title)));
+$("#backup").addEventListener("click", foreground(() => {
+  download(makeBackup(current), fileName(current.title, "iris"));
+  notice("Respaldo listo. Puedes importarlo en otra instalación de Iris.");
+}));
 $("#share").addEventListener("click", async () => {
   const file = new File([current.pdf], fileName(current.title), { type: "application/pdf" });
   try {

@@ -3,14 +3,14 @@
 Escáner de documentos de la familia [Auralis](https://github.com/OscarD0823/auralis). Toma fotos con el celular o el PC, corrige el papel y reúne las páginas en un PDF liviano.
 
 - [Abrir en el navegador](https://oscard0823.github.io/auralis-iris/)
-- [Descargar la beta portable para Windows x64](https://github.com/OscarD0823/auralis-iris/releases/tag/v0.1.0-beta.1)
+- [Descargar la beta portable para Windows x64](https://github.com/OscarD0823/auralis-iris/releases/tag/v0.1.0-beta.2)
 
 ## Escanear y volver a usar un documento
 
 1. Abre Iris y elige **Tomar foto** o **Importar fotos**. La aplicación guarda cada página en la biblioteca del dispositivo.
-2. Pulsa una página para girarla, corregir sus cuatro esquinas o aplicar grises y contraste. **Detectar bordes** sugiere las esquinas cuando el papel se distingue del fondo.
-3. Ordena las páginas y elige **Ligero**, **Equilibrado** o **Nítido**. **Generar PDF** guarda el archivo y muestra su peso. Puedes descargarlo o compartirlo.
-4. Abre el documento desde **Biblioteca** para agregar páginas, cambiar los ajustes o volver a descargar el PDF.
+2. Pulsa una página para girarla, corregir sus cuatro esquinas o elegir su acabado. **Detectar bordes** sugiere las esquinas cuando el papel se distingue del fondo. Para hojas de texto impreso, **Blanco y negro** separa la tinta del papel y guarda la imagen con un bit por píxel.
+3. Ordena las páginas y elige **Ligero**, **Equilibrado** o **Nítido**. **Generar PDF** muestra el avance y el tamaño final. Puedes cancelar la exportación y conservar el documento editable.
+4. Abre el documento desde **Biblioteca** para agregar páginas, cambiar los ajustes o volver a descargar el PDF. Si cambias el documento, la biblioteca conserva el PDF anterior hasta que lo actualices.
 
 La optimización ajusta la resolución y la compresión de cada foto antes de incluirla en el PDF. Las páginas conservan sus proporciones y se colocan en A4 vertical u horizontal. Se admiten hasta 60 páginas por documento y hasta 40 MB por archivo importado o enviado. La compresión se aplica a los PDF creados a partir de fotos.
 
@@ -39,7 +39,11 @@ Esta modalidad usa un canal WebRTC cifrado y directo, sin servidor de archivos. 
 
 ## Biblioteca local
 
-Cada navegador guarda sus propias páginas editables y PDF en IndexedDB. La web y el programa portable usan bibliotecas separadas. Conserva copias descargadas si vas a limpiar los datos del navegador, cambiar de perfil o cambiar de equipo. GitHub aloja el código, la aplicación y las descargas del programa.
+Cada navegador guarda sus propias páginas editables y PDF en IndexedDB. La web y el programa portable usan bibliotecas separadas.
+
+Abre un documento y elige **Descargar respaldo** para guardar un archivo `.iris` con las fotos, el recorte, el orden, los acabados y el PDF guardado. Usa **Importar respaldo** en Iris beta.2 o posterior para recuperarlo como un documento nuevo. Guarda los respaldos fuera del navegador antes de limpiar sus datos o cambiar de equipo.
+
+GitHub aloja el código, la aplicación y las descargas del programa.
 
 ## Desarrollo
 
@@ -51,5 +55,7 @@ pwsh -File scripts/build-windows.ps1
 ```
 
 El servidor local abre `http://127.0.0.1:53129/`. GitHub Actions publica `app/` en GitHub Pages al cambiar `main`.
+
+Ejecuta `node --test` para comprobar el formato de respaldo y el empaquetado de imágenes en blanco y negro.
 
 El código de Auralis Iris se publica bajo AGPL-3.0-or-later, como el resto de Auralis. Las bibliotecas incluidas conservan [sus propias licencias](THIRD-PARTY.md).

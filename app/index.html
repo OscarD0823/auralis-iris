@@ -11,9 +11,6 @@
   <link rel="apple-touch-icon" href="./iris-192.png">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./styles.css">
-  <script defer src="./vendor/pdf-lib.js"></script>
-  <script defer src="./vendor/qrcode.js"></script>
-  <script defer src="./vendor/jsqr.js"></script>
   <script type="module" src="./app.js"></script>
 </head>
 <body>
@@ -44,6 +41,10 @@
         </div>
         <ul id="library" class="library-list"></ul>
         <p id="library-empty" class="muted small-text">Tus escaneos aparecerán aquí cuando agregues la primera foto.</p>
+        <div class="library-tools">
+          <button id="restore" type="button" class="outline small">Importar respaldo</button>
+          <input id="backup-file" type="file" accept=".iris" hidden>
+        </div>
       </aside>
       <section class="editor panel" aria-labelledby="editor-title">
         <div class="panel-heading">
@@ -84,21 +85,30 @@
           </label>
           <button id="generate" type="button" class="primary" disabled>Generar PDF</button>
         </div>
+        <div id="export-job" class="export-job" hidden>
+          <label for="export-progress" id="export-label">Preparando PDF…</label>
+          <progress id="export-progress"></progress>
+          <button id="cancel-export" type="button" class="outline small">Cancelar exportación</button>
+        </div>
         <div id="pdf-result" class="pdf-result" hidden>
-          <div><strong>PDF guardado</strong><span id="pdf-size" class="muted"></span></div>
+          <div><strong id="pdf-label">PDF guardado</strong><span id="pdf-size" class="muted"></span></div>
           <div class="actions">
             <button id="download" type="button" class="outline small">Descargar</button>
             <button id="share" type="button" class="outline small">Compartir archivo</button>
             <button id="send-pdf" type="button" class="outline small" hidden>Enviar al otro dispositivo</button>
           </div>
         </div>
-        <div class="editor-footer"><button id="delete-doc" type="button" class="text-button danger" hidden>Eliminar documento</button><span class="muted small-text">Guardado local</span></div>
+        <div class="editor-footer">
+          <button id="backup" type="button" class="outline small" hidden>Descargar respaldo</button>
+          <button id="delete-doc" type="button" class="text-button danger" hidden>Eliminar documento</button>
+          <span class="muted small-text">Guardado local</span>
+        </div>
       </section>
     </div>
     <p id="status" class="status" role="status" aria-live="polite" hidden></p>
     <footer class="footer">
-      <span>Auralis Iris · 0.1.0-beta.1</span>
-      <a href="https://github.com/OscarD0823/auralis-iris/releases/tag/v0.1.0-beta.1">Descargar para Windows</a>
+      <span>Auralis Iris · 0.1.0-beta.2</span>
+      <a href="https://github.com/OscarD0823/auralis-iris/releases/tag/v0.1.0-beta.2">Descargar para Windows</a>
       <a href="https://github.com/OscarD0823/auralis-iris">Código en GitHub</a>
     </footer>
   </main>
@@ -120,7 +130,12 @@
     </div>
     <p id="crop-hint" class="muted small-text" aria-live="polite" hidden></p>
     <label class="field" for="filter"><span>Acabado de página</span>
-      <select id="filter"><option value="color">Color</option><option value="gray">Grises</option><option value="text">Texto con contraste</option></select>
+      <select id="filter">
+        <option value="color">Color</option>
+        <option value="gray">Grises</option>
+        <option value="text">Texto con contraste</option>
+        <option value="bw">Blanco y negro para texto impreso</option>
+      </select>
     </label>
     <div class="actions dialog-actions">
       <button type="button" id="send-page" class="outline" hidden>Enviar página</button>
@@ -143,7 +158,7 @@
     <p><strong>Windows</strong> · Usa la opción <em>Instalar esta aplicación</em> de Edge o Chrome. La edición portable abre el escáner y permite conectar el celular con un solo QR.</p>
     <p><strong>Android</strong> · En Chrome, abre el menú y elige <em>Instalar aplicación</em> o <em>Añadir a pantalla de inicio</em>.</p>
     <p><strong>iPhone y iPad</strong> · En Safari, abre <em>Compartir</em> y elige <em>Añadir a pantalla de inicio</em>.</p>
-    <p><a href="https://github.com/OscarD0823/auralis-iris/releases/tag/v0.1.0-beta.1">Descargar la beta para Windows</a></p>
+    <p><a href="https://github.com/OscarD0823/auralis-iris/releases/tag/v0.1.0-beta.2">Descargar la beta para Windows</a></p>
   </dialog>
 </body>
 </html>

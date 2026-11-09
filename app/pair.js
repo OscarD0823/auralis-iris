@@ -5,6 +5,29 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const types = new Set(["image/jpeg", "application/pdf"]);
 const idPattern = /^[a-f0-9]{32}$/;
 const linkPattern = /^[a-f0-9]{48}$/;
+const vendorScripts = new Map();
+
+async function loadVendor(file) {
+  if (!vendorScripts.has(file)) {
+    const loaded = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = new URL("./vendor/" + file, import.meta.url);
+      script.onload = resolve;
+      script.onerror = () => {
+        script.remove();
+        reject(new Error("No se pudo cargar el lector de códigos de Iris."));
+      };
+      document.head.append(script);
+    });
+    vendorScripts.set(file, loaded);
+  }
+  try {
+    await vendorScripts.get(file);
+  } catch (error) {
+    vendorScripts.delete(file);
+    throw error;
+  }
+}
 
 function makePacket(blob, name, id = newId()) {
   if (!types.has(blob.type) || !blob.size || blob.size > MAX_FILE || !idPattern.test(id)) {
@@ -362,6 +385,7 @@ export function setupPair({ receive, onChange }) {
   }
 
   async function hostLan() {
+    await loadVendor("qrcode.js");
     const { key, urls } = await (await api("pair", { method: "POST" })).json();
     link = lanLink(key, false, receive, report);
     const explain = "Escanea el QR con la cámara del celular conectado a la misma red. Usa una red de confianza: la edición portable envía los archivos por HTTP local.";
@@ -395,6 +419,7 @@ export function setupPair({ receive, onChange }) {
       stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
       if (cancelled) return;
       video.srcObject = stream;
+      await loadVendor("jsqr.js");
       const canvas = node("canvas");
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       while (!cancelled) {
@@ -418,6 +443,7 @@ export function setupPair({ receive, onChange }) {
   }
 
   async function hostRtc() {
+    await loadVendor("qrcode.js");
     link = rtcLink(false, receive, report);
     const { pc } = link;
     await pc.setLocalDescription(await pc.createOffer());
@@ -454,6 +480,7 @@ export function setupPair({ receive, onChange }) {
       link.start();
     } else if (offer) {
       const remote = await decodeCode(offer, "offer");
+      await loadVendor("qrcode.js");
       link = rtcLink(true, receive, report);
       const { pc } = link;
       await pc.setRemoteDescription(remote);
