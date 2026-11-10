@@ -1,4 +1,5 @@
 import { MAX_FILE, newId, validQuad } from "./scan.js";
+import { android, stageAndroidFile } from "./android.js";
 
 const $ = (selector) => document.querySelector(selector);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -6,6 +7,7 @@ const types = new Set(["image/jpeg", "application/pdf"]);
 const idPattern = /^[a-f0-9]{32}$/;
 const linkPattern = /^[a-f0-9]{48}$/;
 const vendorScripts = new Map();
+const webHome = "https://oscard0823.github.io/auralis-iris/";
 
 async function loadVendor(file) {
   if (!vendorScripts.has(file)) {
@@ -53,17 +55,30 @@ async function validFile(blob) {
   return new TextDecoder().decode(prefix) === "%PDF-";
 }
 
-async function api(path, options = {}) {
+async function api(path, options = {}, address) {
   const { key, ...init } = options;
   const headers = new Headers(init.headers);
   if (key) headers.set("Authorization", "Bearer " + key);
-  const response = await fetch("./api/" + path, { ...init, headers, cache: "no-store", signal: AbortSignal.timeout(30000) });
-  if (!response.ok) {
-    const error = new Error((await response.text()).trim() || "No se pudo comunicar con el otro dispositivo.");
-    error.code = response.status;
-    throw error;
+  let upload;
+  try {
+    const route = address ? "./__iris_lan/" + encodeURIComponent(address) + "/" : "./api/";
+    if (address) {
+      headers.set("X-Iris-Method", init.method || "GET");
+      if (init.body) {
+        upload = await stageAndroidFile(init.body, init.body.type === "image/jpeg" ? "Envio.jpg" : "Envio.pdf");
+        headers.set("X-Iris-Upload", upload);
+      }
+    }
+    const response = await fetch(route + path, { ...(address ? {} : init), headers, cache: "no-store", signal: AbortSignal.timeout(30000) });
+    if (!response.ok) {
+      const error = new Error((await response.text()).trim() || "No se pudo comunicar con el otro dispositivo.");
+      error.code = response.status;
+      throw error;
+    }
+    return response;
+  } finally {
+    if (upload) android.discardFile(upload);
   }
-  return response;
 }
 
 async function localEdition() {
@@ -76,7 +91,7 @@ async function localEdition() {
   }
 }
 
-function lanLink(key, isGuest, receive, state) {
+function lanLink(key, isGuest, receive, state, address) {
   let closed = false;
   let online = false;
   let timer;
@@ -84,7 +99,7 @@ function lanLink(key, isGuest, receive, state) {
   async function poll() {
     if (closed) return;
     try {
-      const response = await api("inbox", { key });
+      const response = await api("inbox", { key }, address);
       if (closed) return;
       const connected = response.headers.get("X-Iris-Online") === "true";
       if (connected !== online) {
@@ -98,7 +113,7 @@ function lanLink(key, isGuest, receive, state) {
           const name = decodeURIComponent(response.headers.get("X-Iris-Name") || "Archivo");
           await receive(blob, name, id, readQuad(response.headers.get("X-Iris-Quad")));
         }
-        await api("inbox", { method: "DELETE", key, headers: { "X-Iris-ID": id } });
+        await api("inbox", { method: "DELETE", key, headers: { "X-Iris-ID": id } }, address);
       }
     } catch (error) {
       if (closed) return;
@@ -122,10 +137,10 @@ function lanLink(key, isGuest, receive, state) {
       if (packet.quad) headers["X-Iris-Quad"] = JSON.stringify(packet.quad);
       await api("inbox", {
         method: "POST", key, body: blob, headers
-      });
+      }, address);
       const until = Date.now() + 35000;
       while (!closed && Date.now() < until) {
-        const status = await api("outbox", { key });
+        const status = await api("outbox", { key }, address);
         if (status.headers.get("X-Iris-Pending") !== packet.id) return;
         await delay(500);
       }
@@ -134,7 +149,7 @@ function lanLink(key, isGuest, receive, state) {
     close() {
       closed = true;
       clearTimeout(timer);
-      api("pair", { method: "DELETE", key }).catch(() => {});
+      api("pair", { method: "DELETE", key }, address).catch(() => {});
     }
   };
 }
@@ -350,6 +365,27 @@ function copyable(value, name, status) {
   return [field, copy];
 }
 
+function androidInvitation(value) {
+  let url;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return;
+  }
+  if (url.username || url.password || url.search) return;
+  const params = new URLSearchParams(url.hash.slice(1));
+  if (params.get("rtc")?.startsWith("IRIS1.O.") && !params.has("lan") && ["http:", "https:"].includes(url.protocol)) {
+    return { params };
+  }
+  const parts = url.hostname.split(".").map(Number);
+  const [first, second] = parts;
+  const local = first === 10 || (first === 192 && second === 168) || (first === 172 && second >= 16 && second <= 31);
+  if (url.protocol === "http:" && url.pathname === "/" && parts.length === 4 && local &&
+      Number(url.port) >= 1024 && linkPattern.test(params.get("lan")) && !params.has("rtc")) {
+    return { params, address: url.host };
+  }
+}
+
 export function setupPair({ receive, onChange }) {
   const dialog = $("#pair-dialog");
   const content = $("#pair-content");
@@ -358,6 +394,7 @@ export function setupPair({ receive, onChange }) {
   let active = false;
   let stopQR = () => {};
   let invitation = new URLSearchParams(location.hash.slice(1));
+  let address;
   const bridge = localEdition();
 
   function show() {
@@ -414,8 +451,8 @@ export function setupPair({ receive, onChange }) {
     link.start();
   }
 
-  async function scanReply(group, input) {
-    if (!navigator.mediaDevices?.getUserMedia) throw new Error("Pega el código de respuesta desde el celular.");
+  async function readQR(group, accepts) {
+    stopQR();
     const video = node("video", "", "qr-camera");
     video.autoplay = video.muted = video.playsInline = true;
     group.append(video);
@@ -428,7 +465,7 @@ export function setupPair({ receive, onChange }) {
     };
     stopQR = stop;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" } } });
       if (cancelled) return;
       video.srcObject = stream;
       await loadVendor("jsqr.js");
@@ -440,12 +477,8 @@ export function setupPair({ receive, onChange }) {
           canvas.height = Math.round(canvas.width * video.videoHeight / video.videoWidth);
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const reply = globalThis.jsQR(pixels.data, pixels.width, pixels.height)?.data;
-          if (reply?.startsWith("IRIS1.A.")) {
-            input.value = reply;
-            input.focus();
-            return;
-          }
+          const code = globalThis.jsQR(pixels.data, pixels.width, pixels.height)?.data;
+          if (code && accepts(code)) return code;
         }
         await delay(160);
       }
@@ -460,7 +493,7 @@ export function setupPair({ receive, onChange }) {
     const { pc } = link;
     await pc.setLocalDescription(await pc.createOffer());
     await gather(pc);
-    const url = new URL(location.pathname, location.origin);
+    const url = android ? new URL(webHome) : new URL(location.pathname, location.origin);
     url.hash = "rtc=" + await encodeCode(pc.localDescription);
     const group = showInvitation(url.href, "1. Abre el enlace en el celular con el QR. Mantén ambos dispositivos en la misma red.");
     const field = node("label", "", "field");
@@ -476,7 +509,13 @@ export function setupPair({ receive, onChange }) {
       status.textContent = "Conectando con el celular…";
     }), "primary"));
     if (navigator.mediaDevices?.getUserMedia) {
-      actions.append(button("Leer respuesta con cámara", guarded(() => scanReply(group, input))));
+      actions.append(button("Leer respuesta con cámara", guarded(async () => {
+        const reply = await readQR(group, (code) => code.startsWith("IRIS1.A."));
+        if (reply) {
+          input.value = reply;
+          input.focus();
+        }
+      })));
     }
     group.insertBefore(field, group.lastChild);
     group.insertBefore(actions, group.lastChild);
@@ -487,8 +526,8 @@ export function setupPair({ receive, onChange }) {
     const key = invitation.get("lan");
     const offer = invitation.get("rtc");
     if (linkPattern.test(key)) {
-      const guestKey = (await (await api("join", { method: "POST", key })).json()).key;
-      link = lanLink(guestKey, true, receive, report);
+      const guestKey = (await (await api("join", { method: "POST", key }, address)).json()).key;
+      link = lanLink(guestKey, true, receive, report, address);
       link.start();
     } else if (offer) {
       const remote = await decodeCode(offer, "offer");
@@ -510,6 +549,7 @@ export function setupPair({ receive, onChange }) {
 
   function clearInvitation() {
     invitation = new URLSearchParams();
+    address = undefined;
     history.replaceState(null, "", location.pathname + location.search);
   }
 
@@ -542,6 +582,29 @@ export function setupPair({ receive, onChange }) {
     const local = await bridge;
     const group = steps(node("p", "Conecta ambos dispositivos a la misma red. El otro equipo recibirá las fotos en el documento que tenga abierto."));
     if (local) group.append(button("Mostrar QR de la red local", guarded(hostLan, true), "primary"));
+    if (android) {
+      const useInvitation = (value) => {
+        const parsed = androidInvitation(value);
+        if (!parsed) throw new Error("Pega un enlace de vinculación de Iris válido.");
+        stopQR();
+        invitation = parsed.params;
+        address = parsed.address;
+        return menu();
+      };
+      if (navigator.mediaDevices?.getUserMedia) {
+        group.append(button("Leer QR de vinculación", guarded(async () => {
+          const value = await readQR(group, androidInvitation);
+          if (value) await useInvitation(value);
+        }), "primary"));
+      }
+      const field = node("label", "", "field");
+      field.append(node("span", "O pega el enlace de vinculación del PC"));
+      const input = node("textarea");
+      input.rows = 2;
+      input.spellcheck = false;
+      field.append(input);
+      group.append(field, button("Abrir enlace", guarded(() => useInvitation(input.value))));
+    }
     if (globalThis.RTCPeerConnection && globalThis.CompressionStream && globalThis.DecompressionStream) {
       group.append(button(local ? "Vincular con códigos web" : "Crear enlace web", guarded(hostRtc, true), local ? "outline" : "primary"));
     }

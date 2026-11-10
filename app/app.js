@@ -2,6 +2,7 @@ import { MAX_PAGES, makePage, rotatePage, validQuad, fullFrame, isFullFrame, det
 import { openLibrary, readScans, saveScan, deleteScan } from "./store.js";
 import { setupPair } from "./pair.js";
 import { exportImages, exportPdf } from "./export.js";
+import { android, exportAndroidFile } from "./android.js";
 
 const $ = (selector) => document.querySelector(selector);
 const pageDialog = $("#page-dialog");
@@ -12,6 +13,7 @@ const pagesList = $("#pages");
 const dateFormat = new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short" });
 const sizeFormat = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 });
 const thumbURLs = new Map();
+const connectLabel = android ? "Conectar dispositivos" : "Conectar celular";
 
 function emptyScan() {
   return { id: newId(), title: "Escaneo sin título", pages: [], pdf: null, profile: "balanced", updated: 0 };
@@ -318,7 +320,7 @@ async function receiveFile(blob, title, id, quad) {
 function connectionChanged(online, isGuest) {
   connected = online;
   guest = isGuest;
-  $("#pair span").textContent = online ? "Dispositivo vinculado" : "Conectar celular";
+  $("#pair span").textContent = online ? "Dispositivo vinculado" : connectLabel;
   $("#take-photo span").textContent = online && isGuest ? "Tomar foto y enviar" : "Tomar foto";
   const banner = $("#connection-banner");
   banner.hidden = !online;
@@ -441,7 +443,7 @@ pageDialog.addEventListener("close", () => {
 });
 
 async function openCamera() {
-  if (!navigator.mediaDevices?.getUserMedia || matchMedia("(pointer: coarse)").matches || guest) {
+  if (android || !navigator.mediaDevices?.getUserMedia || matchMedia("(pointer: coarse)").matches || guest) {
     $("#camera-file").click();
     return;
   }
@@ -572,15 +574,19 @@ $("#generate").addEventListener("click", foreground(async () => {
 }));
 
 function download(blob, filename) {
+  if (android) return exportAndroidFile(blob, filename);
   const url = URL.createObjectURL(blob);
   const link = create("a");
   link.href = url;
   link.download = filename;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
+  return true;
 }
 
-$("#download").addEventListener("click", () => download(current.pdf, fileName(current.title)));
+$("#download").addEventListener("click", foreground(async () => {
+  if (await download(current.pdf, fileName(current.title)) && android) notice("PDF guardado.");
+}));
 
 function downloadImages(pageId) {
   return foreground(async () => {
@@ -593,15 +599,20 @@ function downloadImages(pageId) {
     await withExportProgress(selected.length, multiple ? "imágenes JPG" : "JPG", async (signal, progress, finishing) => {
       const file = await exportImages(selected, progress, signal);
       finishing("Preparando descarga…");
-      download(file, fileName(title, multiple ? "zip" : "jpg", suffix));
-      notice(multiple ? "ZIP listo con " + selected.length + " imágenes JPG." : "Imagen JPG lista.");
+      if (await download(file, fileName(title, multiple ? "zip" : "jpg", suffix))) {
+        notice(multiple ? "ZIP listo con " + selected.length + " imágenes JPG." : "Imagen JPG lista.");
+      }
     });
   });
 }
 
 $("#download-images").addEventListener("click", downloadImages());
-$("#share").addEventListener("click", async () => {
+$("#share").addEventListener("click", foreground(async () => {
   const file = new File([current.pdf], fileName(current.title), { type: "application/pdf" });
+  if (android) {
+    await exportAndroidFile(file, file.name, true);
+    return;
+  }
   try {
     if (navigator.canShare?.({ files: [file] })) {
       await navigator.share({ files: [file] });
@@ -612,7 +623,7 @@ $("#share").addEventListener("click", async () => {
   } catch (error) {
     if (error.name !== "AbortError") notice("El sistema no pudo compartir el PDF. Descárgalo para enviarlo.", true);
   }
-});
+}));
 
 $("#send-pdf").addEventListener("click", foreground(async () => {
   await pairing.send(current.pdf, current.title);
@@ -633,8 +644,9 @@ $("#install").addEventListener("click", async () => {
     await prompt.prompt();
   } else $("#install-dialog").showModal();
 });
-if (matchMedia("(display-mode: standalone)").matches || navigator.standalone) $("#install").hidden = true;
-if (isSecureContext && "serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
+if (android || matchMedia("(display-mode: standalone)").matches || navigator.standalone) $("#install").hidden = true;
+if (android) $("#pair span").textContent = connectLabel;
+if (!android && isSecureContext && "serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
 
 serialized(async () => {
   await reloadLibrary();
